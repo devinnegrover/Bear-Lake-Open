@@ -58,7 +58,6 @@
       text-align: center;
       border: 1px solid #ddd;
       white-space: nowrap;
-      position: relative;
     }
     th { 
       background: #2c5f2d; 
@@ -82,42 +81,12 @@
       font-size: 18px;
       border: 2px solid #ccc;
       border-radius: 8px;
-      background: transparent;
     }
     input:focus {
       outline: none;
       border-color: #2c5f2d;
       background: #f0f8f0;
     }
-
-    /* Visual indicators */
-    .birdie {
-      color: #2e7d32;
-      font-weight: bold;
-      position: relative;
-    }
-    .birdie::after {
-      content: "●";
-      position: absolute;
-      top: -2px;
-      right: -2px;
-      font-size: 14px;
-      color: #2e7d32;
-    }
-    .bogey {
-      color: #c62828;
-      font-weight: bold;
-      position: relative;
-    }
-    .bogey::after {
-      content: "■";
-      position: absolute;
-      top: -2px;
-      right: -2px;
-      font-size: 14px;
-      color: #c62828;
-    }
-
     .vs-par { 
       font-size: 0.85em; 
       color: #555; 
@@ -173,10 +142,9 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Players with scores sorted by lowest total • Blank scorecards at bottom<br>
-  Birdie = ● &nbsp;&nbsp; Bogey = ■</p>
+  <p class="leaderboard-note">Players with scores sorted by lowest total • Blank scorecards at bottom</p>
 
-  <!-- History Section remains the same as before -->
+  <!-- History Section -->
   <div id="historySection" class="history-section" style="display:none;">
     <h2>Past Rounds</h2>
     <div class="controls">
@@ -222,6 +190,7 @@
         let total = 0;
         let completedHoles = 0;
         let parCompleted = 0;
+
         for (let h = 1; h <= numHoles; h++) {
           const key = `p${p}h${h}`;
           if (scores[key] !== undefined) {
@@ -231,6 +200,7 @@
             parCompleted += courses[currentCourse].par[h-1];
           }
         }
+
         players.push({
           id: p,
           name: scores[`player${p}Name`] || `Player ${p}`,
@@ -241,6 +211,7 @@
         });
       }
 
+      // Sort: players WITH scores first (by lowest total), blank players at bottom
       players.sort((a, b) => {
         if (a.hasScores && !b.hasScores) return -1;
         if (!a.hasScores && b.hasScores) return 1;
@@ -276,13 +247,10 @@
       players.forEach(player => {
         const p = player.id;
         let row = `<tr><td class="player-name" contenteditable="true" onblur="updateName(${p}, this.textContent)">${player.name}</td>`;
-        
         for (let h = 1; h <= numHoles; h++) {
           const key = `p${p}h${h}`;
           const value = scores[key] !== undefined ? scores[key] : '';
-          const par = courseData.par[h-1];
-          let displayValue = value ? `<span class="score-cell" id="cell-${p}-${h}">${value}</span>` : '';
-          row += `<td><input type="number" id="${key}" min="0" value="${value}" oninput="updateScore(${p}, ${h}, this.value)" style="display:none;">${displayValue}</td>`;
+          row += `<td><input type="number" id="${key}" min="0" value="${value}" oninput="updateScore(${p}, ${h}, this.value)"></td>`;
         }
 
         let vsParText = '—';
@@ -294,30 +262,6 @@
         row += `<td><div>${player.total || 0}</div><div class="vs-par">(${vsParText})</div></td></tr>`;
         tbody.innerHTML += row;
       });
-
-      // Apply visual indicators after rendering
-      applyScoreIndicators();
-    }
-
-    function applyScoreIndicators() {
-      const courseData = courses[currentCourse];
-      for (let p = 1; p <= numPlayers; p++) {
-        for (let h = 1; h <= numHoles; h++) {
-          const key = `p${p}h${h}`;
-          const input = document.getElementById(key);
-          if (!input || !input.value) continue;
-
-          const score = parseInt(input.value);
-          const par = courseData.par[h-1];
-          const cell = document.getElementById(`cell-${p}-${h}`);
-
-          if (cell) {
-            cell.classList.remove('birdie', 'bogey');
-            if (score === par - 1) cell.classList.add('birdie');
-            else if (score === par + 1) cell.classList.add('bogey');
-          }
-        }
-      }
     }
 
     window.updateScore = function(player, hole, value) {
@@ -325,13 +269,134 @@
       if (value === '' || value === null) delete scores[key];
       else scores[key] = parseInt(value) || 0;
       saveCurrentData();
-      createTable();   // re-render to apply indicators
+      createTable();
     };
 
-    // Rest of the functions (addPlayer, removePlayer, saveCurrentRound, history, etc.) remain the same as the previous working version.
+    window.updateName = function(player, newName) {
+      scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
+      saveCurrentData();
+      createTable();
+    };
 
-    // (For brevity, the full history + other functions are identical to the last version you had. 
-    // If you need the complete code with all functions, let me know and I'll provide the full file.)
+    window.changeCourse = function() {
+      currentCourse = document.getElementById('courseSelect').value;
+      createTable();
+      saveCurrentData();
+    };
+
+    window.addPlayer = function() {
+      if (numPlayers >= maxPlayers) return alert(`Maximum ${maxPlayers} players reached.`);
+      numPlayers++;
+      createTable();
+      saveCurrentData();
+    };
+
+    window.removePlayer = function() {
+      if (numPlayers <= 1) return alert("You need at least 1 player.");
+      if (!confirm("Remove the last player and all their scores?")) return;
+      for (let h = 1; h <= numHoles; h++) delete scores[`p${numPlayers}h${h}`];
+      delete scores[`player${numPlayers}Name`];
+      numPlayers--;
+      createTable();
+      saveCurrentData();
+    };
+
+    window.resetScores = function() {
+      if (confirm("Clear all scores but keep player names?")) {
+        for (let p = 1; p <= numPlayers; p++) {
+          for (let h = 1; h <= numHoles; h++) delete scores[`p${p}h${h}`];
+        }
+        createTable();
+        saveCurrentData();
+      }
+    };
+
+    function getHistory() {
+      const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
+      return saved ? JSON.parse(saved) : [];
+    }
+
+    window.saveCurrentRound = function() {
+      const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
+      if (!roundName) return;
+
+      const history = getHistory();
+      const roundData = {
+        id: Date.now(),
+        date: new Date().toLocaleString(),
+        name: roundName,
+        course: currentCourse,
+        numPlayers: numPlayers,
+        scores: JSON.parse(JSON.stringify(scores))
+      };
+      history.unshift(roundData);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
+
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = `✅ "${roundName}" saved successfully!`;
+      setTimeout(() => statusEl.textContent = '', 4000);
+    };
+
+    function loadRound(roundId) {
+      const history = getHistory();
+      const round = history.find(r => r.id === roundId);
+      if (!round || !confirm(`Load "${round.name}"? Current round will be replaced.`)) return;
+
+      currentCourse = round.course;
+      numPlayers = round.numPlayers;
+      scores = round.scores || {};
+      document.getElementById('courseSelect').value = currentCourse;
+      createTable();
+      saveCurrentData();
+      hideHistory();
+    }
+
+    function deleteRound(roundId) {
+      if (!confirm("Delete this round?")) return;
+      let history = getHistory().filter(r => r.id !== roundId);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+      showHistory();
+    }
+
+    window.showHistory = function() {
+      const history = getHistory();
+      const listDiv = document.getElementById('historyList');
+      listDiv.innerHTML = '';
+
+      if (history.length === 0) {
+        listDiv.innerHTML = '<p>No saved rounds yet. Use "Save Round" after playing.</p>';
+      } else {
+        history.forEach(round => {
+          const div = document.createElement('div');
+          div.className = 'history-item';
+          div.innerHTML = `
+            <div>
+              <strong>${round.name}</strong><br>
+              <small>${round.date} • ${courses[round.course].name} • ${round.numPlayers} players</small>
+            </div>
+            <div>
+              <button onclick="loadRound(${round.id})" style="margin-right:6px;">Load</button>
+              <button onclick="deleteRound(${round.id})">Delete</button>
+            </div>
+          `;
+          listDiv.appendChild(div);
+        });
+      }
+      document.getElementById('historySection').style.display = 'block';
+    };
+
+    window.hideHistory = function() {
+      document.getElementById('historySection').style.display = 'none';
+    };
+
+    window.clearAllHistory = function() {
+      if (confirm("Delete ALL saved rounds?")) {
+        localStorage.removeItem(STORAGE_KEY_HISTORY);
+        showHistory();
+      }
+    };
+
+    document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
 
     // Initialize
     loadCurrentData();
