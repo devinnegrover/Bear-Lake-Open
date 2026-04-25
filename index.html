@@ -2,76 +2,46 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Bear Lake Open - Debug</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bear Lake Open - Minimal Test</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 100%; margin: 0 auto; padding: 15px; background: #f0f4f0; }
-    h1 { text-align: center; color: #2c5f2d; }
-    .status { 
-      text-align: center; 
-      padding: 15px; 
-      margin: 10px 0; 
-      background: #fff3cd; 
-      border-radius: 8px; 
-      font-weight: bold; 
-      white-space: pre-wrap; 
-      font-size: 14px;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f4f0; }
+    .status { padding: 20px; margin: 20px 0; background: white; border-radius: 8px; font-size: 16px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-  <h1>⛳ Bear Lake Open - Debug Mode</h1>
-  <div id="status" class="status">Initializing debug...</div>
+  <h1>⛳ Bear Lake Open - Minimal Test</h1>
+  <div id="status" class="status">Loading Supabase client...</div>
 
   <script>
-    const supabaseUrl = 'https://duchhofwmsmlmuvywsyk.supabase.co';
-    const supabaseAnonKey = 'sb_publishable_Nrlevsr9FJCfiD-viBqcuA__Hv_p7BZ';
-    const supabase = Supabase.createClient(supabaseUrl, supabaseAnonKey);
+    const statusEl = document.getElementById('status');
 
-    const ROOM_ID = 'bearlake-open-main';
+    statusEl.textContent = 'Supabase script loaded. Creating client...';
 
-    async function initDebug() {
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = 'Step 1: Creating Supabase client...';
+    try {
+      const supabase = Supabase.createClient(
+        'https://duchhofwmsmlmuvywsyk.supabase.co',
+        'sb_publishable_Nrlevsr9FJCfiD-viBqcuA__Hv_p7BZ'
+      );
 
-      try {
-        // Test basic connection
-        statusEl.textContent = 'Step 2: Testing table query...';
-        const { data, error } = await supabase
-          .from('golf_rounds')
-          .select('*')
-          .eq('room_id', ROOM_ID)
-          .maybeSingle();
+      statusEl.textContent = 'Client created. Testing query to golf_rounds...';
 
-        if (error) {
-          statusEl.innerHTML = `❌ Query Error:\n${error.message}\n\nMake sure RLS is disabled and the row with room_id = bearlake-open-main exists.`;
-          console.error(error);
-          return;
-        }
+      supabase
+        .from('golf_rounds')
+        .select('*')
+        .eq('room_id', 'bearlake-open-main')
+        .then(({ data, error }) => {
+          if (error) {
+            statusEl.textContent = `Query Error:\n${error.message}`;
+          } else {
+            statusEl.textContent = `Success! Row exists: ${data ? 'Yes' : 'No'}\nData: ${JSON.stringify(data, null, 2)}`;
+          }
+        });
 
-        statusEl.innerHTML = `✅ Query successful!\nRow found: ${data ? 'Yes' : 'No'}\n\nNow testing realtime subscription...`;
-
-        // Test realtime
-        const channel = supabase.channel('debug-room')
-          .on('postgres_changes', 
-            { event: '*', schema: 'public', table: 'golf_rounds' },
-            (payload) => {
-              statusEl.innerHTML += `\n\n✅ Realtime event received!`;
-              console.log('Realtime payload:', payload);
-            }
-          )
-          .subscribe((status) => {
-            statusEl.innerHTML += `\n\nSubscription status: ${status}`;
-          });
-
-      } catch (err) {
-        statusEl.textContent = `❌ Unexpected error:\n${err.message}`;
-        console.error(err);
-      }
+    } catch (err) {
+      statusEl.textContent = `Failed to create client:\n${err.message}`;
     }
-
-    initDebug();
   </script>
 </body>
 </html>
