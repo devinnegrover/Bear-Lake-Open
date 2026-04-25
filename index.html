@@ -2,50 +2,364 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bear Lake Open - Test 2</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/2.45.4/supabase.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bear Lake Open</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f4f0; line-height: 1.5; }
-    .status { padding: 20px; margin: 20px 0; background: white; border: 2px solid #ccc; border-radius: 8px; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 15px;
+      background: #f0f4f0;
+      touch-action: manipulation;
+    }
+    h1 { text-align: center; color: #2c5f2d; }
+    .controls {
+      margin: 15px 0;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
+    select, button {
+      padding: 12px 16px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    select { border: 2px solid #2c5f2d; }
+    button {
+      background: #2c5f2d;
+      color: white;
+      border: none;
+    }
+    button:hover, button:active { background: #1e3f1f; }
+
+    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; }
+    table {
+      width: 100%;
+      min-width: 700px;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 14px 10px;
+      text-align: center;
+      border: 1px solid #ddd;
+      white-space: nowrap;
+    }
+    th { background: #2c5f2d; color: white; position: sticky; top: 0; z-index: 10; }
+    .player-name {
+      background: #f8f9fa;
+      font-weight: bold;
+      text-align: left;
+      padding-left: 15px;
+      min-width: 140px;
+    }
+    .par-row td { background: #e8f5e8; font-weight: bold; }
+    input {
+      width: 58px;
+      padding: 12px 8px;
+      text-align: center;
+      font-size: 18px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+    }
+    input:focus {
+      outline: none;
+      border-color: #2c5f2d;
+      background: #f0f8f0;
+    }
+    .vs-par { font-size: 0.85em; color: #555; }
+    .leaderboard-note { text-align: center; font-size: 14px; color: #666; margin: 10px 0; }
+    .status { text-align: center; padding: 10px; margin: 10px 0; background: #e8f5e8; border-radius: 8px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>⛳ Bear Lake Open - Test 2</h1>
-  <div id="status" class="status">Loading...</div>
+  <h1>⛳ Bear Lake Open</h1>
+  
+  <div class="controls">
+    <select id="courseSelect">
+      <option value="bearLakeWest">Bear Lake West (Par 33)</option>
+      <option value="bearLake">Bear Lake Golf Course (Par 36)</option>
+    </select>
+    <button onclick="addPlayer()">+ Add Player</button>
+    <button onclick="removePlayer()">− Remove Player</button>
+    <button onclick="resetScores()">Reset Scores</button>
+    <button onclick="saveCurrentRound()">💾 Save Round</button>
+    <button onclick="showHistory()">📜 View History</button>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <div class="table-container">
+    <table id="scoreTable">
+      <thead>
+        <tr id="headerRow"></tr>
+        <tr id="parRow" class="par-row"></tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <p class="leaderboard-note">Players with scores sorted by lowest total • Blank scorecards at bottom</p>
+
+  <!-- History Section -->
+  <div id="historySection" class="history-section" style="display:none;">
+    <h2>Past Rounds</h2>
+    <div class="controls">
+      <button onclick="hideHistory()">Close</button>
+      <button onclick="clearAllHistory()">Clear All History</button>
+    </div>
+    <div id="historyList" style="max-height:400px; overflow-y:auto;"></div>
+  </div>
 
   <script>
-    const statusEl = document.getElementById('status');
-    statusEl.textContent = 'Loading Supabase from alternative CDN...';
+    const courses = {
+      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
+      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
+    };
 
-    try {
-      const supabase = supabaseJs.createClient(
-        'https://duchhofwmsmlmuvywsyk.supabase.co',
-        'sb_publishable_Nrlevsr9FJCfiD-viBqcuA__Hv_p7BZ'
-      );
+    let numPlayers = 4;
+    const maxPlayers = 35;
+    const numHoles = 9;
+    let currentCourse = 'bearLakeWest';
+    let scores = {};
 
-      statusEl.textContent = 'Client created successfully!\n\nTesting query to table...';
+    const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
+    const STORAGE_KEY_HISTORY = 'bearLakeGolfHistory';
 
-      supabase
-        .from('golf_rounds')
-        .select('room_id, data')
-        .eq('room_id', 'bearlake-open-main')
-        .then(({ data, error }) => {
-          if (error) {
-            statusEl.textContent += `\n\nQuery Error: ${error.message}`;
-          } else {
-            statusEl.textContent += `\n\n✅ Query successful!\nRows found: ${data ? data.length : 0}`;
-            if (data && data.length > 0) {
-              statusEl.textContent += `\n\nRoom data exists. Real-time should work.`;
-            } else {
-              statusEl.textContent += `\n\nNo row found for room_id. Please insert one in Supabase.`;
-            }
-          }
-        });
-
-    } catch (err) {
-      statusEl.textContent = `Failed:\n${err.message}`;
+    function loadCurrentData() {
+      const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
+      if (saved) {
+        const data = JSON.parse(saved);
+        numPlayers = Math.min(data.numPlayers || 4, maxPlayers);
+        currentCourse = data.currentCourse || 'bearLakeWest';
+        scores = data.scores || {};
+        document.getElementById('courseSelect').value = currentCourse;
+      }
     }
+
+    function saveCurrentData() {
+      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify({ numPlayers, currentCourse, scores }));
+    }
+
+    function getPlayerData() {
+      const players = [];
+      for (let p = 1; p <= numPlayers; p++) {
+        let total = 0;
+        let completedHoles = 0;
+        let parCompleted = 0;
+        for (let h = 1; h <= numHoles; h++) {
+          const key = `p${p}h${h}`;
+          if (scores[key] !== undefined) {
+            const score = parseInt(scores[key]) || 0;
+            total += score;
+            completedHoles++;
+            parCompleted += courses[currentCourse].par[h-1];
+          }
+        }
+        players.push({
+          id: p,
+          name: scores[`player${p}Name`] || `Player ${p}`,
+          total: total,
+          completedHoles: completedHoles,
+          parCompleted: parCompleted,
+          hasScores: completedHoles > 0
+        });
+      }
+
+      players.sort((a, b) => {
+        if (a.hasScores && !b.hasScores) return -1;
+        if (!a.hasScores && b.hasScores) return 1;
+        if (a.hasScores && b.hasScores) return a.total - b.total;
+        return 0;
+      });
+
+      return players;
+    }
+
+    function createTable() {
+      const headerRow = document.getElementById('headerRow');
+      const parRow = document.getElementById('parRow');
+      const tbody = document.getElementById('tableBody');
+
+      headerRow.innerHTML = '';
+      parRow.innerHTML = '';
+      tbody.innerHTML = '';
+
+      const courseData = courses[currentCourse];
+      const players = getPlayerData();
+
+      let headerHTML = '<th class="player-name">Player</th>';
+      for (let h = 1; h <= numHoles; h++) headerHTML += `<th>${h}</th>`;
+      headerHTML += '<th>Total</th>';
+      headerRow.innerHTML = headerHTML;
+
+      let parHTML = '<td><strong>Par</strong></td>';
+      for (let h = 1; h <= numHoles; h++) parHTML += `<td>${courseData.par[h-1]}</td>`;
+      parHTML += `<td>${courseData.par.reduce((a,b)=>a+b,0)}</td>`;
+      parRow.innerHTML = parHTML;
+
+      players.forEach(player => {
+        const p = player.id;
+        let row = `<tr><td class="player-name" contenteditable="true" onblur="updateName(${p}, this.textContent)">${player.name}</td>`;
+        for (let h = 1; h <= numHoles; h++) {
+          const key = `p${p}h${h}`;
+          const value = scores[key] !== undefined ? scores[key] : '';
+          row += `<td><input type="number" id="${key}" min="0" value="${value}" oninput="updateScore(${p}, ${h}, this.value)"></td>`;
+        }
+        let vsParText = '—';
+        if (player.completedHoles > 0) {
+          const vsPar = player.total - player.parCompleted;
+          vsParText = vsPar === 0 ? 'E' : (vsPar > 0 ? `+${vsPar}` : vsPar);
+        }
+        row += `<td><div>${player.total || 0}</div><div class="vs-par">(${vsParText})</div></td></tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    window.updateScore = function(player, hole, value) {
+      const key = `p${player}h${hole}`;
+      if (value === '' || value === null) delete scores[key];
+      else scores[key] = parseInt(value) || 0;
+      saveCurrentData();
+      createTable();
+    };
+
+    window.updateName = function(player, newName) {
+      scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
+      saveCurrentData();
+      createTable();
+    };
+
+    window.changeCourse = function() {
+      currentCourse = document.getElementById('courseSelect').value;
+      createTable();
+      saveCurrentData();
+    };
+
+    window.addPlayer = function() {
+      if (numPlayers >= maxPlayers) return alert(`Maximum ${maxPlayers} players reached.`);
+      numPlayers++;
+      createTable();
+      saveCurrentData();
+    };
+
+    window.removePlayer = function() {
+      if (numPlayers <= 1) return alert("You need at least 1 player.");
+      if (!confirm("Remove the last player and all their scores?")) return;
+      for (let h = 1; h <= numHoles; h++) delete scores[`p${numPlayers}h${h}`];
+      delete scores[`player${numPlayers}Name`];
+      numPlayers--;
+      createTable();
+      saveCurrentData();
+    };
+
+    window.resetScores = function() {
+      if (confirm("Clear all scores but keep player names?")) {
+        for (let p = 1; p <= numPlayers; p++) {
+          for (let h = 1; h <= numHoles; h++) delete scores[`p${p}h${h}`];
+        }
+        createTable();
+        saveCurrentData();
+      }
+    };
+
+    // History functions (local only)
+    function getHistory() {
+      const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
+      return saved ? JSON.parse(saved) : [];
+    }
+
+    window.saveCurrentRound = function() {
+      const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
+      if (!roundName) return;
+
+      const history = getHistory();
+      const roundData = {
+        id: Date.now(),
+        date: new Date().toLocaleString(),
+        name: roundName,
+        course: currentCourse,
+        numPlayers: numPlayers,
+        scores: JSON.parse(JSON.stringify(scores))
+      };
+      history.unshift(roundData);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
+
+      document.getElementById('status').textContent = `✅ "${roundName}" saved locally!`;
+      setTimeout(() => document.getElementById('status').textContent = '', 3000);
+    };
+
+    function loadRound(roundId) {
+      const history = getHistory();
+      const round = history.find(r => r.id === roundId);
+      if (!round || !confirm(`Load "${round.name}"?`)) return;
+
+      currentCourse = round.course;
+      numPlayers = round.numPlayers;
+      scores = round.scores || {};
+      document.getElementById('courseSelect').value = currentCourse;
+      createTable();
+      saveCurrentData();
+      hideHistory();
+    }
+
+    function deleteRound(roundId) {
+      if (!confirm("Delete this round?")) return;
+      let history = getHistory().filter(r => r.id !== roundId);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+      showHistory();
+    }
+
+    window.showHistory = function() {
+      const history = getHistory();
+      const listDiv = document.getElementById('historyList');
+      listDiv.innerHTML = '';
+
+      if (history.length === 0) {
+        listDiv.innerHTML = '<p>No saved rounds yet.</p>';
+      } else {
+        history.forEach(round => {
+          const div = document.createElement('div');
+          div.className = 'history-item';
+          div.innerHTML = `
+            <div>
+              <strong>${round.name}</strong><br>
+              <small>${round.date} • ${courses[round.course].name} • ${round.numPlayers} players</small>
+            </div>
+            <div>
+              <button onclick="loadRound(${round.id})" style="margin-right:6px;">Load</button>
+              <button onclick="deleteRound(${round.id})">Delete</button>
+            </div>
+          `;
+          listDiv.appendChild(div);
+        });
+      }
+      document.getElementById('historySection').style.display = 'block';
+    };
+
+    window.hideHistory = function() {
+      document.getElementById('historySection').style.display = 'none';
+    };
+
+    window.clearAllHistory = function() {
+      if (confirm("Delete ALL saved rounds?")) {
+        localStorage.removeItem(STORAGE_KEY_HISTORY);
+        showHistory();
+      }
+    };
+
+    document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
+
+    // Initialize
+    loadCurrentData();
+    createTable();
   </script>
 </body>
 </html>
