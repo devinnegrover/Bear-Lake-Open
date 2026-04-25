@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Bear Lake Open</title>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -75,7 +77,14 @@
       background: #f0f8f0;
     }
     .vs-par { font-size: 0.85em; color: #555; }
-    .leaderboard-note { text-align: center; font-size: 14px; color: #666; margin: 10px 0; }
+    .status { 
+      text-align: center; 
+      padding: 12px; 
+      margin: 10px 0; 
+      background: #e8f5e8; 
+      border-radius: 8px; 
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -89,9 +98,9 @@
     <button onclick="addPlayer()">+ Add Player</button>
     <button onclick="removePlayer()">− Remove Player</button>
     <button onclick="resetScores()">Reset Scores</button>
-    <button onclick="saveCurrentRound()">💾 Save Round</button>
-    <button onclick="showHistory()">📜 View History</button>
   </div>
+
+  <div id="status" class="status">Connecting to shared scorecard...</div>
 
   <div class="table-container">
     <table id="scoreTable">
@@ -103,23 +112,23 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Sorted by score vs par on completed holes • Blank scorecards at bottom</p>
-
-  <!-- History Section -->
-  <div id="historySection" style="display:none; margin-top:30px;">
-    <h2>Past Rounds</h2>
-    <div class="controls">
-      <button onclick="hideHistory()">Close</button>
-      <button onclick="clearAllHistory()">Clear All History</button>
-    </div>
-    <div id="historyList" style="max-height:400px; overflow-y:auto;"></div>
-  </div>
+  <p class="leaderboard-note">Real-time multiplayer test</p>
 
   <script>
-    const courses = {
-      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
-      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
+    // Your Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAt3hyuQdxOYLvn9r_aU8OtdS8FOUx3QZo",
+      authDomain: "bear-lake-open.firebaseapp.com",
+      projectId: "bear-lake-open",
+      storageBucket: "bear-lake-open.firebasestorage.app",
+      messagingSenderId: "320705402987",
+      appId: "1:320705402987:web:a2b6a6f10c4a5475dfb92e",
+      measurementId: "G-JZJNMDTY8F"
     };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const ROOM_ID = "bearlake-open-main";
 
     let numPlayers = 4;
     const maxPlayers = 35;
@@ -127,23 +136,10 @@
     let currentCourse = 'bearLakeWest';
     let scores = {};
 
-    const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
-    const STORAGE_KEY_HISTORY = 'bearLakeGolfHistory';
-
-    function loadCurrentData() {
-      const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
-      if (saved) {
-        const data = JSON.parse(saved);
-        numPlayers = Math.min(data.numPlayers || 4, maxPlayers);
-        currentCourse = data.currentCourse || 'bearLakeWest';
-        scores = data.scores || {};
-        document.getElementById('courseSelect').value = currentCourse;
-      }
-    }
-
-    function saveCurrentData() {
-      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify({ numPlayers, currentCourse, scores }));
-    }
+    const courses = {
+      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
+      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
+    };
 
     function getPlayerData() {
       const players = [];
@@ -227,27 +223,27 @@
       const key = `p${player}h${hole}`;
       if (value === '' || value === null) delete scores[key];
       else scores[key] = parseInt(value) || 0;
-      saveCurrentData();
+      saveToFirebase();
       createTable();
     };
 
     window.updateName = function(player, newName) {
       scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
-      saveCurrentData();
+      saveToFirebase();
       createTable();
     };
 
     window.changeCourse = function() {
       currentCourse = document.getElementById('courseSelect').value;
       createTable();
-      saveCurrentData();
+      saveToFirebase();
     };
 
     window.addPlayer = function() {
       if (numPlayers >= maxPlayers) return alert(`Maximum ${maxPlayers} players reached.`);
       numPlayers++;
       createTable();
-      saveCurrentData();
+      saveToFirebase();
     };
 
     window.removePlayer = function() {
@@ -257,7 +253,7 @@
       delete scores[`player${numPlayers}Name`];
       numPlayers--;
       createTable();
-      saveCurrentData();
+      saveToFirebase();
     };
 
     window.resetScores = function() {
@@ -266,98 +262,39 @@
           for (let h = 1; h <= numHoles; h++) delete scores[`p${p}h${h}`];
         }
         createTable();
-        saveCurrentData();
+        saveToFirebase();
       }
     };
 
-    // History functions
-    function getHistory() {
-      const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
-      return saved ? JSON.parse(saved) : [];
-    }
-
-    window.saveCurrentRound = function() {
-      const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
-      if (!roundName) return;
-
-      const history = getHistory();
-      const roundData = {
-        id: Date.now(),
-        date: new Date().toLocaleString(),
-        name: roundName,
-        course: currentCourse,
+    function saveToFirebase() {
+      const ref = database.ref('rounds/' + ROOM_ID);
+      ref.set({
         numPlayers: numPlayers,
-        scores: JSON.parse(JSON.stringify(scores))
-      };
-      history.unshift(roundData);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
-      alert(`"${roundName}" saved to history!`);
-    };
-
-    function loadRound(roundId) {
-      const history = getHistory();
-      const round = history.find(r => r.id === roundId);
-      if (!round || !confirm(`Load "${round.name}"?`)) return;
-
-      currentCourse = round.course;
-      numPlayers = round.numPlayers;
-      scores = round.scores || {};
-      document.getElementById('courseSelect').value = currentCourse;
-      createTable();
-      saveCurrentData();
-      hideHistory();
+        currentCourse: currentCourse,
+        scores: scores,
+        timestamp: Date.now()
+      });
     }
 
-    function deleteRound(roundId) {
-      if (!confirm("Delete this round?")) return;
-      let history = getHistory().filter(r => r.id !== roundId);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
-      showHistory();
-    }
-
-    window.showHistory = function() {
-      const history = getHistory();
-      const listDiv = document.getElementById('historyList');
-      listDiv.innerHTML = '';
-
-      if (history.length === 0) {
-        listDiv.innerHTML = '<p>No saved rounds yet.</p>';
-      } else {
-        history.forEach(round => {
-          const div = document.createElement('div');
-          div.className = 'history-item';
-          div.innerHTML = `
-            <div>
-              <strong>${round.name}</strong><br>
-              <small>${round.date} • ${courses[round.course].name} • ${round.numPlayers} players</small>
-            </div>
-            <div>
-              <button onclick="loadRound(${round.id})" style="margin-right:6px;">Load</button>
-              <button onclick="deleteRound(${round.id})">Delete</button>
-            </div>
-          `;
-          listDiv.appendChild(div);
-        });
+    // Real-time listener
+    const ref = database.ref('rounds/' + ROOM_ID);
+    ref.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        numPlayers = data.numPlayers || numPlayers;
+        currentCourse = data.currentCourse || currentCourse;
+        scores = data.scores || {};
+        document.getElementById('courseSelect').value = currentCourse;
+        createTable();
       }
-      document.getElementById('historySection').style.display = 'block';
-    };
-
-    window.hideHistory = function() {
-      document.getElementById('historySection').style.display = 'none';
-    };
-
-    window.clearAllHistory = function() {
-      if (confirm("Delete ALL saved rounds?")) {
-        localStorage.removeItem(STORAGE_KEY_HISTORY);
-        showHistory();
-      }
-    };
+    });
 
     document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
 
     // Initialize
     loadCurrentData();
     createTable();
+    document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes should sync live';
   </script>
 </body>
 </html>
