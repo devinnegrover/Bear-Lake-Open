@@ -103,7 +103,7 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Sorted like a real leaderboard: by score vs par on completed holes • Blank at bottom</p>
+  <p class="leaderboard-note">Sorted like a real leaderboard: by score vs par on completed holes • Blank scorecards at bottom</p>
 
   <!-- History Section -->
   <div id="historySection" style="display:none; margin-top:30px;">
@@ -162,7 +162,7 @@
           }
         }
 
-        const vsPar = completedHoles > 0 ? (total - parCompleted) : 999; // blank players go to bottom
+        const vsPar = completedHoles > 0 ? (total - parCompleted) : 999; // large number to push blank players to bottom
 
         players.push({
           id: p,
@@ -174,7 +174,7 @@
         });
       }
 
-      // Real leaderboard sort: first by vsPar on completed holes, then by total strokes
+      // Real leaderboard sort: by vsPar on completed holes, then by total strokes
       players.sort((a, b) => {
         if (a.hasScores && !b.hasScores) return -1;
         if (!a.hasScores && b.hasScores) return 1;
@@ -276,7 +276,7 @@
       }
     };
 
-    // History functions (local)
+    // History functions
     function getHistory() {
       const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
       return saved ? JSON.parse(saved) : [];
@@ -285,6 +285,7 @@
     window.saveCurrentRound = function() {
       const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
       if (!roundName) return;
+
       const history = getHistory();
       const roundData = {
         id: Date.now(),
@@ -299,10 +300,68 @@
       alert(`"${roundName}" saved to history!`);
     };
 
-    // ... (showHistory, loadRound, etc. - same as your previous working version)
+    function loadRound(roundId) {
+      const history = getHistory();
+      const round = history.find(r => r.id === roundId);
+      if (!round || !confirm(`Load "${round.name}"? Current round will be replaced.`)) return;
+
+      currentCourse = round.course;
+      numPlayers = round.numPlayers;
+      scores = round.scores || {};
+      document.getElementById('courseSelect').value = currentCourse;
+      createTable();
+      saveCurrentData();
+      hideHistory();
+    }
+
+    function deleteRound(roundId) {
+      if (!confirm("Delete this round?")) return;
+      let history = getHistory().filter(r => r.id !== roundId);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+      showHistory();
+    }
+
+    window.showHistory = function() {
+      const history = getHistory();
+      const listDiv = document.getElementById('historyList');
+      listDiv.innerHTML = '';
+
+      if (history.length === 0) {
+        listDiv.innerHTML = '<p>No saved rounds yet.</p>';
+      } else {
+        history.forEach(round => {
+          const div = document.createElement('div');
+          div.className = 'history-item';
+          div.innerHTML = `
+            <div>
+              <strong>${round.name}</strong><br>
+              <small>${round.date} • ${courses[round.course].name} • ${round.numPlayers} players</small>
+            </div>
+            <div>
+              <button onclick="loadRound(${round.id})" style="margin-right:6px;">Load</button>
+              <button onclick="deleteRound(${round.id})">Delete</button>
+            </div>
+          `;
+          listDiv.appendChild(div);
+        });
+      }
+      document.getElementById('historySection').style.display = 'block';
+    };
+
+    window.hideHistory = function() {
+      document.getElementById('historySection').style.display = 'none';
+    };
+
+    window.clearAllHistory = function() {
+      if (confirm("Delete ALL saved rounds?")) {
+        localStorage.removeItem(STORAGE_KEY_HISTORY);
+        showHistory();
+      }
+    };
 
     document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
 
+    // Initialize
     loadCurrentData();
     createTable();
   </script>
