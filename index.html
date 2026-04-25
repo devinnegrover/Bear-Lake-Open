@@ -3,448 +3,75 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Bear Lake Open</title>
+  <title>Bear Lake Open - Debug</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 100%;
-      margin: 0 auto;
-      padding: 15px;
-      background: #f0f4f0;
-      touch-action: manipulation;
-    }
+    body { font-family: Arial, sans-serif; max-width: 100%; margin: 0 auto; padding: 15px; background: #f0f4f0; }
     h1 { text-align: center; color: #2c5f2d; }
-    .controls {
-      margin: 15px 0;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-    }
-    select, button {
-      padding: 12px 16px;
-      font-size: 16px;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    select { border: 2px solid #2c5f2d; }
-    button {
-      background: #2c5f2d;
-      color: white;
-      border: none;
-    }
-    button:hover, button:active { background: #1e3f1f; }
-
-    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; }
-    table {
-      width: 100%;
-      min-width: 700px;
-      border-collapse: collapse;
-      background: white;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    th, td {
-      padding: 14px 10px;
-      text-align: center;
-      border: 1px solid #ddd;
-      white-space: nowrap;
-    }
-    th { background: #2c5f2d; color: white; position: sticky; top: 0; z-index: 10; }
-    .player-name {
-      background: #f8f9fa;
-      font-weight: bold;
-      text-align: left;
-      padding-left: 15px;
-      min-width: 140px;
-    }
-    .par-row td { background: #e8f5e8; font-weight: bold; }
-    input {
-      width: 58px;
-      padding: 12px 8px;
-      text-align: center;
-      font-size: 18px;
-      border: 2px solid #ccc;
-      border-radius: 8px;
-    }
-    input:focus {
-      outline: none;
-      border-color: #2c5f2d;
-      background: #f0f8f0;
-    }
-    .vs-par { font-size: 0.85em; color: #555; }
-    .leaderboard-note { text-align: center; font-size: 14px; color: #666; margin: 10px 0; }
     .status { 
       text-align: center; 
-      padding: 10px; 
+      padding: 15px; 
       margin: 10px 0; 
-      background: #e8f5e8; 
+      background: #fff3cd; 
       border-radius: 8px; 
-      font-weight: bold;
-    }
-    .history-section { margin-top: 30px; }
-    .history-item {
-      background: white;
-      padding: 12px;
-      margin: 8px 0;
-      border-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      font-weight: bold; 
+      white-space: pre-wrap; 
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <h1>⛳ Bear Lake Open</h1>
-  
-  <div class="controls">
-    <select id="courseSelect">
-      <option value="bearLakeWest">Bear Lake West (Par 33)</option>
-      <option value="bearLake">Bear Lake Golf Course (Par 36)</option>
-    </select>
-    <button onclick="addPlayer()">+ Add Player</button>
-    <button onclick="removePlayer()">− Remove Player</button>
-    <button onclick="resetScores()">Reset Scores</button>
-    <button onclick="saveCurrentRound()">💾 Save Round (Local)</button>
-    <button onclick="showHistory()">📜 View History</button>
-  </div>
-
-  <div id="status" class="status">Connecting to shared scorecard...</div>
-
-  <div class="table-container">
-    <table id="scoreTable">
-      <thead>
-        <tr id="headerRow"></tr>
-        <tr id="parRow" class="par-row"></tr>
-      </thead>
-      <tbody id="tableBody"></tbody>
-    </table>
-  </div>
-
-  <p class="leaderboard-note">Real-time multiplayer enabled • Blank scorecards at bottom</p>
-
-  <!-- History Section -->
-  <div id="historySection" class="history-section" style="display:none;">
-    <h2>Past Rounds</h2>
-    <div class="controls">
-      <button onclick="hideHistory()">Close</button>
-      <button onclick="clearAllHistory()">Clear All History</button>
-    </div>
-    <div id="historyList" style="max-height:400px; overflow-y:auto;"></div>
-  </div>
+  <h1>⛳ Bear Lake Open - Debug Mode</h1>
+  <div id="status" class="status">Initializing debug...</div>
 
   <script>
-    // Supabase Setup
     const supabaseUrl = 'https://duchhofwmsmlmuvywsyk.supabase.co';
     const supabaseAnonKey = 'sb_publishable_Nrlevsr9FJCfiD-viBqcuA__Hv_p7BZ';
     const supabase = Supabase.createClient(supabaseUrl, supabaseAnonKey);
 
     const ROOM_ID = 'bearlake-open-main';
 
-    let numPlayers = 4;
-    const maxPlayers = 35;
-    const numHoles = 9;
-    let currentCourse = 'bearLakeWest';
-    let scores = {};
-
-    const courses = {
-      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
-      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
-    };
-
-    const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
-    const STORAGE_KEY_HISTORY = 'bearLakeGolfHistory';
-
-    // Load from Supabase (shared) or local fallback
-    async function loadData() {
-      const { data, error } = await supabase
-        .from('golf_rounds')
-        .select('data')
-        .eq('room_id', ROOM_ID)
-        .single();
-
-      if (data && data.data) {
-        const loaded = data.data;
-        numPlayers = loaded.numPlayers || 4;
-        currentCourse = loaded.currentCourse || 'bearLakeWest';
-        scores = loaded.scores || {};
-        document.getElementById('courseSelect').value = currentCourse;
-        document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes sync live';
-      } else {
-        // Fallback to localStorage
-        const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
-        if (saved) {
-          const localData = JSON.parse(saved);
-          numPlayers = localData.numPlayers || 4;
-          currentCourse = localData.currentCourse || 'bearLakeWest';
-          scores = localData.scores || {};
-          document.getElementById('courseSelect').value = currentCourse;
-        }
-        document.getElementById('status').textContent = 'Using local mode (no shared data yet)';
-      }
-      createTable();
-    }
-
-    // Save to Supabase for real-time sync
-    async function saveToSupabase() {
-      const payload = {
-        room_id: ROOM_ID,
-        data: { numPlayers, currentCourse, scores }
-      };
-
-      await supabase.from('golf_rounds').upsert(payload, { onConflict: 'room_id' });
-    }
-
-    // Real-time listener
-    function subscribeToChanges() {
-      supabase
-        .channel('golf-room')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'golf_rounds', filter: `room_id=eq.${ROOM_ID}` },
-          (payload) => {
-            if (payload.new && payload.new.data) {
-              const loaded = payload.new.data;
-              numPlayers = loaded.numPlayers || numPlayers;
-              currentCourse = loaded.currentCourse || currentCourse;
-              scores = loaded.scores || scores;
-              document.getElementById('courseSelect').value = currentCourse;
-              createTable();
-            }
-          }
-        )
-        .subscribe();
-    }
-
-    function saveCurrentData() {
-      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify({ numPlayers, currentCourse, scores }));
-    }
-
-    function getPlayerData() {
-      const players = [];
-      for (let p = 1; p <= numPlayers; p++) {
-        let total = 0;
-        let completedHoles = 0;
-        let parCompleted = 0;
-        for (let h = 1; h <= numHoles; h++) {
-          const key = `p${p}h${h}`;
-          if (scores[key] !== undefined) {
-            const score = parseInt(scores[key]) || 0;
-            total += score;
-            completedHoles++;
-            parCompleted += courses[currentCourse].par[h-1];
-          }
-        }
-        players.push({
-          id: p,
-          name: scores[`player${p}Name`] || `Player ${p}`,
-          total: total,
-          completedHoles: completedHoles,
-          parCompleted: parCompleted,
-          hasScores: completedHoles > 0
-        });
-      }
-
-      players.sort((a, b) => {
-        if (a.hasScores && !b.hasScores) return -1;
-        if (!a.hasScores && b.hasScores) return 1;
-        if (a.hasScores && b.hasScores) return a.total - b.total;
-        return 0;
-      });
-
-      return players;
-    }
-
-    function createTable() {
-      const headerRow = document.getElementById('headerRow');
-      const parRow = document.getElementById('parRow');
-      const tbody = document.getElementById('tableBody');
-
-      headerRow.innerHTML = '';
-      parRow.innerHTML = '';
-      tbody.innerHTML = '';
-
-      const courseData = courses[currentCourse];
-      const players = getPlayerData();
-
-      let headerHTML = '<th class="player-name">Player</th>';
-      for (let h = 1; h <= numHoles; h++) headerHTML += `<th>${h}</th>`;
-      headerHTML += '<th>Total</th>';
-      headerRow.innerHTML = headerHTML;
-
-      let parHTML = '<td><strong>Par</strong></td>';
-      for (let h = 1; h <= numHoles; h++) parHTML += `<td>${courseData.par[h-1]}</td>`;
-      parHTML += `<td>${courseData.par.reduce((a,b)=>a+b,0)}</td>`;
-      parRow.innerHTML = parHTML;
-
-      players.forEach(player => {
-        const p = player.id;
-        let row = `<tr><td class="player-name" contenteditable="true" onblur="updateName(${p}, this.textContent)">${player.name}</td>`;
-        for (let h = 1; h <= numHoles; h++) {
-          const key = `p${p}h${h}`;
-          const value = scores[key] !== undefined ? scores[key] : '';
-          row += `<td><input type="number" id="${key}" min="0" value="${value}" oninput="updateScore(${p}, ${h}, this.value)"></td>`;
-        }
-        let vsParText = '—';
-        if (player.completedHoles > 0) {
-          const vsPar = player.total - player.parCompleted;
-          vsParText = vsPar === 0 ? 'E' : (vsPar > 0 ? `+${vsPar}` : vsPar);
-        }
-        row += `<td><div>${player.total || 0}</div><div class="vs-par">(${vsParText})</div></td></tr>`;
-        tbody.innerHTML += row;
-      });
-    }
-
-    window.updateScore = function(player, hole, value) {
-      const key = `p${player}h${hole}`;
-      if (value === '' || value === null) delete scores[key];
-      else scores[key] = parseInt(value) || 0;
-      saveCurrentData();
-      saveToSupabase();
-      createTable();
-    };
-
-    window.updateName = function(player, newName) {
-      scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
-      saveCurrentData();
-      saveToSupabase();
-      createTable();
-    };
-
-    window.changeCourse = function() {
-      currentCourse = document.getElementById('courseSelect').value;
-      createTable();
-      saveToSupabase();
-    };
-
-    window.addPlayer = function() {
-      if (numPlayers >= maxPlayers) return alert(`Maximum ${maxPlayers} players reached.`);
-      numPlayers++;
-      createTable();
-      saveCurrentData();
-      saveToSupabase();
-    };
-
-    window.removePlayer = function() {
-      if (numPlayers <= 1) return alert("You need at least 1 player.");
-      if (!confirm("Remove the last player and all their scores?")) return;
-      for (let h = 1; h <= numHoles; h++) delete scores[`p${numPlayers}h${h}`];
-      delete scores[`player${numPlayers}Name`];
-      numPlayers--;
-      createTable();
-      saveCurrentData();
-      saveToSupabase();
-    };
-
-    window.resetScores = function() {
-      if (confirm("Clear all scores but keep player names?")) {
-        for (let p = 1; p <= numPlayers; p++) {
-          for (let h = 1; h <= numHoles; h++) delete scores[`p${p}h${h}`];
-        }
-        createTable();
-        saveCurrentData();
-        saveToSupabase();
-      }
-    };
-
-    // History functions (local only for now)
-    function getHistory() {
-      const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
-      return saved ? JSON.parse(saved) : [];
-    }
-
-    window.saveCurrentRound = function() {
-      const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
-      if (!roundName) return;
-
-      const history = getHistory();
-      const roundData = {
-        id: Date.now(),
-        date: new Date().toLocaleString(),
-        name: roundName,
-        course: currentCourse,
-        numPlayers: numPlayers,
-        scores: JSON.parse(JSON.stringify(scores))
-      };
-      history.unshift(roundData);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
-
+    async function initDebug() {
       const statusEl = document.getElementById('status');
-      statusEl.textContent = `✅ "${roundName}" saved locally!`;
-      setTimeout(() => { statusEl.textContent = '✅ Connected to shared scorecard'; }, 3000);
-    };
+      statusEl.textContent = 'Step 1: Creating Supabase client...';
 
-    function loadRound(roundId) {
-      const history = getHistory();
-      const round = history.find(r => r.id === roundId);
-      if (!round || !confirm(`Load "${round.name}"?`)) return;
+      try {
+        // Test basic connection
+        statusEl.textContent = 'Step 2: Testing table query...';
+        const { data, error } = await supabase
+          .from('golf_rounds')
+          .select('*')
+          .eq('room_id', ROOM_ID)
+          .maybeSingle();
 
-      currentCourse = round.course;
-      numPlayers = round.numPlayers;
-      scores = round.scores || {};
-      document.getElementById('courseSelect').value = currentCourse;
-      createTable();
-      saveCurrentData();
-      saveToSupabase();
-      hideHistory();
-    }
+        if (error) {
+          statusEl.innerHTML = `❌ Query Error:\n${error.message}\n\nMake sure RLS is disabled and the row with room_id = bearlake-open-main exists.`;
+          console.error(error);
+          return;
+        }
 
-    function deleteRound(roundId) {
-      if (!confirm("Delete this round?")) return;
-      let history = getHistory().filter(r => r.id !== roundId);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
-      showHistory();
-    }
+        statusEl.innerHTML = `✅ Query successful!\nRow found: ${data ? 'Yes' : 'No'}\n\nNow testing realtime subscription...`;
 
-    window.showHistory = function() {
-      const history = getHistory();
-      const listDiv = document.getElementById('historyList');
-      listDiv.innerHTML = '';
+        // Test realtime
+        const channel = supabase.channel('debug-room')
+          .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'golf_rounds' },
+            (payload) => {
+              statusEl.innerHTML += `\n\n✅ Realtime event received!`;
+              console.log('Realtime payload:', payload);
+            }
+          )
+          .subscribe((status) => {
+            statusEl.innerHTML += `\n\nSubscription status: ${status}`;
+          });
 
-      if (history.length === 0) {
-        listDiv.innerHTML = '<p>No saved rounds yet.</p>';
-      } else {
-        history.forEach(round => {
-          const div = document.createElement('div');
-          div.className = 'history-item';
-          div.innerHTML = `
-            <div>
-              <strong>${round.name}</strong><br>
-              <small>${round.date} • ${courses[round.course].name} • ${round.numPlayers} players</small>
-            </div>
-            <div>
-              <button onclick="loadRound(${round.id})" style="margin-right:6px;">Load</button>
-              <button onclick="deleteRound(${round.id})">Delete</button>
-            </div>
-          `;
-          listDiv.appendChild(div);
-        });
+      } catch (err) {
+        statusEl.textContent = `❌ Unexpected error:\n${err.message}`;
+        console.error(err);
       }
-      document.getElementById('historySection').style.display = 'block';
-    };
-
-    window.hideHistory = function() {
-      document.getElementById('historySection').style.display = 'none';
-    };
-
-    window.clearAllHistory = function() {
-      if (confirm("Delete ALL saved rounds?")) {
-        localStorage.removeItem(STORAGE_KEY_HISTORY);
-        showHistory();
-      }
-    };
-
-    document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
-
-    // Initialize everything
-    async function init() {
-      await loadData();
-      subscribeToChanges();
     }
 
-    init();
+    initDebug();
   </script>
 </body>
 </html>
