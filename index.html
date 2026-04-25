@@ -294,14 +294,14 @@
     function saveToFirebase() {
       const ref = database.ref('rounds/' + ROOM_ID);
       ref.set({
-        numPlayers: numPlayers,
-        currentCourse: currentCourse,
-        scores: scores,
-        lastUpdated: Date.now()
+        numPlayers,
+        currentCourse,
+        scores,
+        timestamp: Date.now()
       });
     }
 
-    // Real-time listener
+    // Real-time listener - force full update
     const ref = database.ref('rounds/' + ROOM_ID);
     ref.on('value', (snapshot) => {
       const data = snapshot.val();
