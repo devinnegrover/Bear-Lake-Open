@@ -118,7 +118,7 @@
   <p class="leaderboard-note">Real-time multiplayer active • Sorted by score vs par on completed holes</p>
 
   <script>
-    // Firebase Config
+    // Firebase Config (yours)
     const firebaseConfig = {
       apiKey: "AIzaSyAt3hyuQdxOYLvn9r_aU8OtdS8FOUx3QZo",
       authDomain: "bear-lake-open.firebaseapp.com",
@@ -294,21 +294,22 @@
     function saveToFirebase() {
       const ref = database.ref('rounds/' + ROOM_ID);
       ref.set({
-        numPlayers,
-        currentCourse,
-        scores,
+        numPlayers: numPlayers,
+        currentCourse: currentCourse,
+        scores: scores,
         timestamp: Date.now()
       });
     }
 
-    // Real-time listener - force full update
+    // Strong real-time listener
     const ref = database.ref('rounds/' + ROOM_ID);
     ref.on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        // Force full update
         numPlayers = data.numPlayers || numPlayers;
         currentCourse = data.currentCourse || currentCourse;
-        scores = data.scores || scores;
+        scores = data.scores || {};
         document.getElementById('courseSelect').value = currentCourse;
         createTable();
       }
