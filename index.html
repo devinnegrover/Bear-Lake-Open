@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Bear Lake Open</title>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -76,6 +78,24 @@
     }
     .vs-par { font-size: 0.85em; color: #555; }
     .leaderboard-note { text-align: center; font-size: 14px; color: #666; margin: 10px 0; }
+    .status { 
+      text-align: center; 
+      padding: 12px; 
+      margin: 10px 0; 
+      background: #e8f5e8; 
+      border-radius: 8px; 
+      font-weight: bold;
+    }
+    .history-section { margin-top: 30px; }
+    .history-item {
+      background: white;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -89,9 +109,11 @@
     <button onclick="addPlayer()">+ Add Player</button>
     <button onclick="removePlayer()">− Remove Player</button>
     <button onclick="resetScores()">Reset Scores</button>
-    <button onclick="saveCurrentRound()">💾 Save Round</button>
+    <button onclick="saveCurrentRound()">💾 Save Round (Local)</button>
     <button onclick="showHistory()">📜 View History</button>
   </div>
+
+  <div id="status" class="status">Connecting to shared scorecard...</div>
 
   <div class="table-container">
     <table id="scoreTable">
@@ -103,11 +125,11 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Sorted like a real leaderboard: by score vs par on completed holes • Blank scorecards at bottom</p>
+  <p class="leaderboard-note">Real-time multiplayer active • Sorted by score vs par on completed holes • Blank at bottom</p>
 
   <!-- History Section -->
-  <div id="historySection" style="display:none; margin-top:30px;">
-    <h2>Past Rounds</h2>
+  <div id="historySection" class="history-section" style="display:none;">
+    <h2>Past Rounds (Local)</h2>
     <div class="controls">
       <button onclick="hideHistory()">Close</button>
       <button onclick="clearAllHistory()">Clear All History</button>
@@ -116,16 +138,31 @@
   </div>
 
   <script>
-    const courses = {
-      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
-      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
+    // Your Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAt3hyuQdxOYLvn9r_aU8OtdS8FOUx3QZo",
+      authDomain: "bear-lake-open.firebaseapp.com",
+      projectId: "bear-lake-open",
+      storageBucket: "bear-lake-open.firebasestorage.app",
+      messagingSenderId: "320705402987",
+      appId: "1:320705402987:web:a2b6a6f10c4a5475dfb92e",
+      measurementId: "G-JZJNMDTY8F"
     };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const ROOM_ID = "bearlake-open-main";
 
     let numPlayers = 4;
     const maxPlayers = 35;
     const numHoles = 9;
     let currentCourse = 'bearLakeWest';
     let scores = {};
+
+    const courses = {
+      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
+      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
+    };
 
     const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
     const STORAGE_KEY_HISTORY = 'bearLakeGolfHistory';
@@ -151,7 +188,6 @@
         let total = 0;
         let completedHoles = 0;
         let parCompleted = 0;
-
         for (let h = 1; h <= numHoles; h++) {
           const key = `p${p}h${h}`;
           if (scores[key] !== undefined) {
@@ -161,9 +197,7 @@
             parCompleted += courses[currentCourse].par[h-1];
           }
         }
-
-        const vsPar = completedHoles > 0 ? (total - parCompleted) : 999; // large number to push blank players to bottom
-
+        const vsPar = completedHoles > 0 ? (total - parCompleted) : 999;
         players.push({
           id: p,
           name: scores[`player${p}Name`] || `Player ${p}`,
@@ -174,7 +208,6 @@
         });
       }
 
-      // Real leaderboard sort: by vsPar on completed holes, then by total strokes
       players.sort((a, b) => {
         if (a.hasScores && !b.hasScores) return -1;
         if (!a.hasScores && b.hasScores) return 1;
@@ -218,12 +251,10 @@
           const value = scores[key] !== undefined ? scores[key] : '';
           row += `<td><input type="number" id="${key}" min="0" value="${value}" oninput="updateScore(${p}, ${h}, this.value)"></td>`;
         }
-
         let vsParText = '—';
         if (player.completedHoles > 0) {
           vsParText = player.vsPar === 0 ? 'E' : (player.vsPar > 0 ? `+${player.vsPar}` : player.vsPar);
         }
-
         row += `<td><div>${player.total || 0}</div><div class="vs-par">(${vsParText})</div></td></tr>`;
         tbody.innerHTML += row;
       });
@@ -234,19 +265,21 @@
       if (value === '' || value === null) delete scores[key];
       else scores[key] = parseInt(value) || 0;
       saveCurrentData();
+      saveToFirebase();
       createTable();
     };
 
     window.updateName = function(player, newName) {
       scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
       saveCurrentData();
+      saveToFirebase();
       createTable();
     };
 
     window.changeCourse = function() {
       currentCourse = document.getElementById('courseSelect').value;
       createTable();
-      saveCurrentData();
+      saveToFirebase();
     };
 
     window.addPlayer = function() {
@@ -254,6 +287,7 @@
       numPlayers++;
       createTable();
       saveCurrentData();
+      saveToFirebase();
     };
 
     window.removePlayer = function() {
@@ -264,6 +298,7 @@
       numPlayers--;
       createTable();
       saveCurrentData();
+      saveToFirebase();
     };
 
     window.resetScores = function() {
@@ -273,10 +308,21 @@
         }
         createTable();
         saveCurrentData();
+        saveToFirebase();
       }
     };
 
-    // History functions
+    function saveToFirebase() {
+      const ref = database.ref('rounds/' + ROOM_ID);
+      ref.set({
+        numPlayers: numPlayers,
+        currentCourse: currentCourse,
+        scores: scores,
+        lastUpdated: Date.now()
+      });
+    }
+
+    // History (local only)
     function getHistory() {
       const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
       return saved ? JSON.parse(saved) : [];
@@ -285,7 +331,6 @@
     window.saveCurrentRound = function() {
       const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
       if (!roundName) return;
-
       const history = getHistory();
       const roundData = {
         id: Date.now(),
@@ -297,13 +342,13 @@
       };
       history.unshift(roundData);
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
-      alert(`"${roundName}" saved to history!`);
+      alert(`"${roundName}" saved locally!`);
     };
 
     function loadRound(roundId) {
       const history = getHistory();
       const round = history.find(r => r.id === roundId);
-      if (!round || !confirm(`Load "${round.name}"? Current round will be replaced.`)) return;
+      if (!round || !confirm(`Load "${round.name}"?`)) return;
 
       currentCourse = round.course;
       numPlayers = round.numPlayers;
@@ -364,6 +409,23 @@
     // Initialize
     loadCurrentData();
     createTable();
+
+    // Real-time listener
+    const ref = database.ref('rounds/' + ROOM_ID);
+    ref.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        numPlayers = data.numPlayers || numPlayers;
+        currentCourse = data.currentCourse || currentCourse;
+        scores = data.scores || scores;
+        document.getElementById('courseSelect').value = currentCourse;
+        createTable();
+        document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes sync live';
+      }
+    });
+
+    // Initial connection message
+    document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes sync live';
   </script>
 </body>
 </html>
