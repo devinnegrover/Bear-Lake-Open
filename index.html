@@ -99,8 +99,6 @@
     <button onclick="addPlayer()">+ Add Player</button>
     <button onclick="removePlayer()">− Remove Player</button>
     <button onclick="resetScores()">Reset Scores</button>
-    <button onclick="saveCurrentRound()">💾 Save Round (Local)</button>
-    <button onclick="showHistory()">📜 View History</button>
   </div>
 
   <div id="status" class="status">Connecting to shared scorecard...</div>
@@ -115,10 +113,10 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Real-time multiplayer active • Sorted by score vs par on completed holes</p>
+  <p class="leaderboard-note">Real-time multiplayer active</p>
 
   <script>
-    // Firebase Config (yours)
+    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyAt3hyuQdxOYLvn9r_aU8OtdS8FOUx3QZo",
       authDomain: "bear-lake-open.firebaseapp.com",
@@ -143,23 +141,6 @@
       bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
       bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
     };
-
-    const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
-
-    function loadCurrentData() {
-      const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
-      if (saved) {
-        const data = JSON.parse(saved);
-        numPlayers = Math.min(data.numPlayers || 4, maxPlayers);
-        currentCourse = data.currentCourse || 'bearLakeWest';
-        scores = data.scores || {};
-        document.getElementById('courseSelect').value = currentCourse;
-      }
-    }
-
-    function saveCurrentData() {
-      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify({ numPlayers, currentCourse, scores }));
-    }
 
     function getPlayerData() {
       const players = [];
@@ -243,14 +224,12 @@
       const key = `p${player}h${hole}`;
       if (value === '' || value === null) delete scores[key];
       else scores[key] = parseInt(value) || 0;
-      saveCurrentData();
       saveToFirebase();
       createTable();
     };
 
     window.updateName = function(player, newName) {
       scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
-      saveCurrentData();
       saveToFirebase();
       createTable();
     };
@@ -265,7 +244,6 @@
       if (numPlayers >= maxPlayers) return alert(`Maximum ${maxPlayers} players reached.`);
       numPlayers++;
       createTable();
-      saveCurrentData();
       saveToFirebase();
     };
 
@@ -276,7 +254,6 @@
       delete scores[`player${numPlayers}Name`];
       numPlayers--;
       createTable();
-      saveCurrentData();
       saveToFirebase();
     };
 
@@ -286,7 +263,6 @@
           for (let h = 1; h <= numHoles; h++) delete scores[`p${p}h${h}`];
         }
         createTable();
-        saveCurrentData();
         saveToFirebase();
       }
     };
@@ -301,12 +277,11 @@
       });
     }
 
-    // Strong real-time listener
+    // Real-time listener - force full replace
     const ref = database.ref('rounds/' + ROOM_ID);
     ref.on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // Force full update
         numPlayers = data.numPlayers || numPlayers;
         currentCourse = data.currentCourse || currentCourse;
         scores = data.scores || {};
