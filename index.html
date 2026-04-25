@@ -3,44 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bear Lake Open - Minimal Test</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>Bear Lake Open - Test 2</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/2.45.4/supabase.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f4f0; }
-    .status { padding: 20px; margin: 20px 0; background: white; border-radius: 8px; font-size: 16px; white-space: pre-wrap; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f4f0; line-height: 1.5; }
+    .status { padding: 20px; margin: 20px 0; background: white; border: 2px solid #ccc; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <h1>⛳ Bear Lake Open - Minimal Test</h1>
-  <div id="status" class="status">Loading Supabase client...</div>
+  <h1>⛳ Bear Lake Open - Test 2</h1>
+  <div id="status" class="status">Loading...</div>
 
   <script>
     const statusEl = document.getElementById('status');
-
-    statusEl.textContent = 'Supabase script loaded. Creating client...';
+    statusEl.textContent = 'Loading Supabase from alternative CDN...';
 
     try {
-      const supabase = Supabase.createClient(
+      const supabase = supabaseJs.createClient(
         'https://duchhofwmsmlmuvywsyk.supabase.co',
         'sb_publishable_Nrlevsr9FJCfiD-viBqcuA__Hv_p7BZ'
       );
 
-      statusEl.textContent = 'Client created. Testing query to golf_rounds...';
+      statusEl.textContent = 'Client created successfully!\n\nTesting query to table...';
 
       supabase
         .from('golf_rounds')
-        .select('*')
+        .select('room_id, data')
         .eq('room_id', 'bearlake-open-main')
         .then(({ data, error }) => {
           if (error) {
-            statusEl.textContent = `Query Error:\n${error.message}`;
+            statusEl.textContent += `\n\nQuery Error: ${error.message}`;
           } else {
-            statusEl.textContent = `Success! Row exists: ${data ? 'Yes' : 'No'}\nData: ${JSON.stringify(data, null, 2)}`;
+            statusEl.textContent += `\n\n✅ Query successful!\nRows found: ${data ? data.length : 0}`;
+            if (data && data.length > 0) {
+              statusEl.textContent += `\n\nRoom data exists. Real-time should work.`;
+            } else {
+              statusEl.textContent += `\n\nNo row found for room_id. Please insert one in Supabase.`;
+            }
           }
         });
 
     } catch (err) {
-      statusEl.textContent = `Failed to create client:\n${err.message}`;
+      statusEl.textContent = `Failed:\n${err.message}`;
     }
   </script>
 </body>
