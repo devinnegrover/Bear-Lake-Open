@@ -86,16 +86,6 @@
       border-radius: 8px; 
       font-weight: bold;
     }
-    .history-section { margin-top: 30px; }
-    .history-item {
-      background: white;
-      padding: 12px;
-      margin: 8px 0;
-      border-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
   </style>
 </head>
 <body>
@@ -125,20 +115,10 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Real-time multiplayer active • Sorted by score vs par on completed holes • Blank at bottom</p>
-
-  <!-- History Section -->
-  <div id="historySection" class="history-section" style="display:none;">
-    <h2>Past Rounds (Local)</h2>
-    <div class="controls">
-      <button onclick="hideHistory()">Close</button>
-      <button onclick="clearAllHistory()">Clear All History</button>
-    </div>
-    <div id="historyList" style="max-height:400px; overflow-y:auto;"></div>
-  </div>
+  <p class="leaderboard-note">Real-time multiplayer active • Sorted by score vs par on completed holes</p>
 
   <script>
-    // Your Firebase Config
+    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyAt3hyuQdxOYLvn9r_aU8OtdS8FOUx3QZo",
       authDomain: "bear-lake-open.firebaseapp.com",
@@ -165,7 +145,6 @@
     };
 
     const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
-    const STORAGE_KEY_HISTORY = 'bearLakeGolfHistory';
 
     function loadCurrentData() {
       const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
@@ -322,94 +301,6 @@
       });
     }
 
-    // History (local only)
-    function getHistory() {
-      const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
-      return saved ? JSON.parse(saved) : [];
-    }
-
-    window.saveCurrentRound = function() {
-      const roundName = prompt("Enter a name for this round:", new Date().toLocaleDateString() + " Round");
-      if (!roundName) return;
-      const history = getHistory();
-      const roundData = {
-        id: Date.now(),
-        date: new Date().toLocaleString(),
-        name: roundName,
-        course: currentCourse,
-        numPlayers: numPlayers,
-        scores: JSON.parse(JSON.stringify(scores))
-      };
-      history.unshift(roundData);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
-      alert(`"${roundName}" saved locally!`);
-    };
-
-    function loadRound(roundId) {
-      const history = getHistory();
-      const round = history.find(r => r.id === roundId);
-      if (!round || !confirm(`Load "${round.name}"?`)) return;
-
-      currentCourse = round.course;
-      numPlayers = round.numPlayers;
-      scores = round.scores || {};
-      document.getElementById('courseSelect').value = currentCourse;
-      createTable();
-      saveCurrentData();
-      hideHistory();
-    }
-
-    function deleteRound(roundId) {
-      if (!confirm("Delete this round?")) return;
-      let history = getHistory().filter(r => r.id !== roundId);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
-      showHistory();
-    }
-
-    window.showHistory = function() {
-      const history = getHistory();
-      const listDiv = document.getElementById('historyList');
-      listDiv.innerHTML = '';
-
-      if (history.length === 0) {
-        listDiv.innerHTML = '<p>No saved rounds yet.</p>';
-      } else {
-        history.forEach(round => {
-          const div = document.createElement('div');
-          div.className = 'history-item';
-          div.innerHTML = `
-            <div>
-              <strong>${round.name}</strong><br>
-              <small>${round.date} • ${courses[round.course].name} • ${round.numPlayers} players</small>
-            </div>
-            <div>
-              <button onclick="loadRound(${round.id})" style="margin-right:6px;">Load</button>
-              <button onclick="deleteRound(${round.id})">Delete</button>
-            </div>
-          `;
-          listDiv.appendChild(div);
-        });
-      }
-      document.getElementById('historySection').style.display = 'block';
-    };
-
-    window.hideHistory = function() {
-      document.getElementById('historySection').style.display = 'none';
-    };
-
-    window.clearAllHistory = function() {
-      if (confirm("Delete ALL saved rounds?")) {
-        localStorage.removeItem(STORAGE_KEY_HISTORY);
-        showHistory();
-      }
-    };
-
-    document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
-
-    // Initialize
-    loadCurrentData();
-    createTable();
-
     // Real-time listener
     const ref = database.ref('rounds/' + ROOM_ID);
     ref.on('value', (snapshot) => {
@@ -420,12 +311,15 @@
         scores = data.scores || scores;
         document.getElementById('courseSelect').value = currentCourse;
         createTable();
-        document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes sync live';
       }
     });
 
-    // Initial connection message
-    document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes sync live';
+    document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
+
+    // Initialize
+    loadCurrentData();
+    createTable();
+    document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes should sync live';
   </script>
 </body>
 </html>
