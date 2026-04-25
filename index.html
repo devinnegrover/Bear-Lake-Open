@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Bear Lake Open</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -13,10 +14,7 @@
       background: #f0f4f0;
       touch-action: manipulation;
     }
-    h1 { 
-      text-align: center; 
-      color: #2c5f2d; 
-    }
+    h1 { text-align: center; color: #2c5f2d; }
     .controls {
       margin: 15px 0;
       display: flex;
@@ -39,11 +37,7 @@
     }
     button:hover, button:active { background: #1e3f1f; }
 
-    .table-container { 
-      overflow-x: auto; 
-      -webkit-overflow-scrolling: touch; 
-      margin-bottom: 20px; 
-    }
+    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; }
     table {
       width: 100%;
       min-width: 700px;
@@ -59,13 +53,7 @@
       border: 1px solid #ddd;
       white-space: nowrap;
     }
-    th { 
-      background: #2c5f2d; 
-      color: white; 
-      position: sticky; 
-      top: 0; 
-      z-index: 10; 
-    }
+    th { background: #2c5f2d; color: white; position: sticky; top: 0; z-index: 10; }
     .player-name {
       background: #f8f9fa;
       font-weight: bold;
@@ -87,15 +75,15 @@
       border-color: #2c5f2d;
       background: #f0f8f0;
     }
-    .vs-par { 
-      font-size: 0.85em; 
-      color: #555; 
-    }
-    .leaderboard-note { 
+    .vs-par { font-size: 0.85em; color: #555; }
+    .leaderboard-note { text-align: center; font-size: 14px; color: #666; margin: 10px 0; }
+    .status { 
       text-align: center; 
-      font-size: 14px; 
-      color: #666; 
+      padding: 10px; 
       margin: 10px 0; 
+      background: #e8f5e8; 
+      border-radius: 8px; 
+      font-weight: bold;
     }
     .history-section { margin-top: 30px; }
     .history-item {
@@ -106,12 +94,6 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-    .status { 
-      text-align: center; 
-      color: #2c5f2d; 
-      font-weight: bold; 
-      margin: 10px 0; 
     }
   </style>
 </head>
@@ -126,11 +108,11 @@
     <button onclick="addPlayer()">+ Add Player</button>
     <button onclick="removePlayer()">− Remove Player</button>
     <button onclick="resetScores()">Reset Scores</button>
-    <button onclick="saveCurrentRound()">💾 Save Round</button>
+    <button onclick="saveCurrentRound()">💾 Save Round (Local)</button>
     <button onclick="showHistory()">📜 View History</button>
   </div>
 
-  <div id="status" class="status"></div>
+  <div id="status" class="status">Connecting to shared scorecard...</div>
 
   <div class="table-container">
     <table id="scoreTable">
@@ -142,7 +124,7 @@
     </table>
   </div>
 
-  <p class="leaderboard-note">Players with scores sorted by lowest total • Blank scorecards at bottom</p>
+  <p class="leaderboard-note">Real-time multiplayer enabled • Blank scorecards at bottom</p>
 
   <!-- History Section -->
   <div id="historySection" class="history-section" style="display:none;">
@@ -155,10 +137,12 @@
   </div>
 
   <script>
-    const courses = {
-      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
-      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
-    };
+    // Supabase Setup
+    const supabaseUrl = 'https://duchhofwmsmlmuvywsyk.supabase.co';
+    const supabaseAnonKey = 'sb_publishable_Nrlevsr9FJCfiD-viBqcuA__Hv_p7BZ';
+    const supabase = Supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+    const ROOM_ID = 'bearlake-open-main';
 
     let numPlayers = 4;
     const maxPlayers = 35;
@@ -166,18 +150,72 @@
     let currentCourse = 'bearLakeWest';
     let scores = {};
 
+    const courses = {
+      bearLakeWest: { name: "Bear Lake West", par: [5,4,3,4,3,3,4,3,4] },
+      bearLake: { name: "Bear Lake Golf Course", par: [4,4,3,5,4,4,4,3,5] }
+    };
+
     const STORAGE_KEY_CURRENT = 'bearLakeGolfCurrent';
     const STORAGE_KEY_HISTORY = 'bearLakeGolfHistory';
 
-    function loadCurrentData() {
-      const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
-      if (saved) {
-        const data = JSON.parse(saved);
-        numPlayers = Math.min(data.numPlayers || 4, maxPlayers);
-        currentCourse = data.currentCourse || 'bearLakeWest';
-        scores = data.scores || {};
+    // Load from Supabase (shared) or local fallback
+    async function loadData() {
+      const { data, error } = await supabase
+        .from('golf_rounds')
+        .select('data')
+        .eq('room_id', ROOM_ID)
+        .single();
+
+      if (data && data.data) {
+        const loaded = data.data;
+        numPlayers = loaded.numPlayers || 4;
+        currentCourse = loaded.currentCourse || 'bearLakeWest';
+        scores = loaded.scores || {};
         document.getElementById('courseSelect').value = currentCourse;
+        document.getElementById('status').innerHTML = '✅ <strong>Connected to shared scorecard</strong> – changes sync live';
+      } else {
+        // Fallback to localStorage
+        const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
+        if (saved) {
+          const localData = JSON.parse(saved);
+          numPlayers = localData.numPlayers || 4;
+          currentCourse = localData.currentCourse || 'bearLakeWest';
+          scores = localData.scores || {};
+          document.getElementById('courseSelect').value = currentCourse;
+        }
+        document.getElementById('status').textContent = 'Using local mode (no shared data yet)';
       }
+      createTable();
+    }
+
+    // Save to Supabase for real-time sync
+    async function saveToSupabase() {
+      const payload = {
+        room_id: ROOM_ID,
+        data: { numPlayers, currentCourse, scores }
+      };
+
+      await supabase.from('golf_rounds').upsert(payload, { onConflict: 'room_id' });
+    }
+
+    // Real-time listener
+    function subscribeToChanges() {
+      supabase
+        .channel('golf-room')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'golf_rounds', filter: `room_id=eq.${ROOM_ID}` },
+          (payload) => {
+            if (payload.new && payload.new.data) {
+              const loaded = payload.new.data;
+              numPlayers = loaded.numPlayers || numPlayers;
+              currentCourse = loaded.currentCourse || currentCourse;
+              scores = loaded.scores || scores;
+              document.getElementById('courseSelect').value = currentCourse;
+              createTable();
+            }
+          }
+        )
+        .subscribe();
     }
 
     function saveCurrentData() {
@@ -190,7 +228,6 @@
         let total = 0;
         let completedHoles = 0;
         let parCompleted = 0;
-
         for (let h = 1; h <= numHoles; h++) {
           const key = `p${p}h${h}`;
           if (scores[key] !== undefined) {
@@ -200,7 +237,6 @@
             parCompleted += courses[currentCourse].par[h-1];
           }
         }
-
         players.push({
           id: p,
           name: scores[`player${p}Name`] || `Player ${p}`,
@@ -211,7 +247,6 @@
         });
       }
 
-      // Sort: players WITH scores first (by lowest total), blank players at bottom
       players.sort((a, b) => {
         if (a.hasScores && !b.hasScores) return -1;
         if (!a.hasScores && b.hasScores) return 1;
@@ -252,13 +287,11 @@
           const value = scores[key] !== undefined ? scores[key] : '';
           row += `<td><input type="number" id="${key}" min="0" value="${value}" oninput="updateScore(${p}, ${h}, this.value)"></td>`;
         }
-
         let vsParText = '—';
         if (player.completedHoles > 0) {
           const vsPar = player.total - player.parCompleted;
           vsParText = vsPar === 0 ? 'E' : (vsPar > 0 ? `+${vsPar}` : vsPar);
         }
-
         row += `<td><div>${player.total || 0}</div><div class="vs-par">(${vsParText})</div></td></tr>`;
         tbody.innerHTML += row;
       });
@@ -269,19 +302,21 @@
       if (value === '' || value === null) delete scores[key];
       else scores[key] = parseInt(value) || 0;
       saveCurrentData();
+      saveToSupabase();
       createTable();
     };
 
     window.updateName = function(player, newName) {
       scores[`player${player}Name`] = newName.trim() || `Player ${player}`;
       saveCurrentData();
+      saveToSupabase();
       createTable();
     };
 
     window.changeCourse = function() {
       currentCourse = document.getElementById('courseSelect').value;
       createTable();
-      saveCurrentData();
+      saveToSupabase();
     };
 
     window.addPlayer = function() {
@@ -289,6 +324,7 @@
       numPlayers++;
       createTable();
       saveCurrentData();
+      saveToSupabase();
     };
 
     window.removePlayer = function() {
@@ -299,6 +335,7 @@
       numPlayers--;
       createTable();
       saveCurrentData();
+      saveToSupabase();
     };
 
     window.resetScores = function() {
@@ -308,9 +345,11 @@
         }
         createTable();
         saveCurrentData();
+        saveToSupabase();
       }
     };
 
+    // History functions (local only for now)
     function getHistory() {
       const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
       return saved ? JSON.parse(saved) : [];
@@ -333,14 +372,14 @@
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
 
       const statusEl = document.getElementById('status');
-      statusEl.textContent = `✅ "${roundName}" saved successfully!`;
-      setTimeout(() => statusEl.textContent = '', 4000);
+      statusEl.textContent = `✅ "${roundName}" saved locally!`;
+      setTimeout(() => { statusEl.textContent = '✅ Connected to shared scorecard'; }, 3000);
     };
 
     function loadRound(roundId) {
       const history = getHistory();
       const round = history.find(r => r.id === roundId);
-      if (!round || !confirm(`Load "${round.name}"? Current round will be replaced.`)) return;
+      if (!round || !confirm(`Load "${round.name}"?`)) return;
 
       currentCourse = round.course;
       numPlayers = round.numPlayers;
@@ -348,6 +387,7 @@
       document.getElementById('courseSelect').value = currentCourse;
       createTable();
       saveCurrentData();
+      saveToSupabase();
       hideHistory();
     }
 
@@ -364,7 +404,7 @@
       listDiv.innerHTML = '';
 
       if (history.length === 0) {
-        listDiv.innerHTML = '<p>No saved rounds yet. Use "Save Round" after playing.</p>';
+        listDiv.innerHTML = '<p>No saved rounds yet.</p>';
       } else {
         history.forEach(round => {
           const div = document.createElement('div');
@@ -398,9 +438,13 @@
 
     document.getElementById('courseSelect').addEventListener('change', window.changeCourse);
 
-    // Initialize
-    loadCurrentData();
-    createTable();
+    // Initialize everything
+    async function init() {
+      await loadData();
+      subscribeToChanges();
+    }
+
+    init();
   </script>
 </body>
 </html>
